@@ -1,0 +1,248 @@
+@page
+@model ChatModel
+@{
+    ViewData["Title"] = "AI Chat Assistant";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/modern-styles.css" />
+    <style>
+        .chat-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 40px);
+        }
+        
+        .chat-header {
+            background: white;
+            border-radius: 16px;
+            padding: 20px 32px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chat-box {
+            flex: 1;
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 16px;
+        }
+        
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+        }
+        
+        .message-user {
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        
+        .message-user .message-avatar {
+            background: var(--primary-color);
+        }
+        
+        .message-ai .message-avatar {
+            background: var(--gray-200);
+        }
+        
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+        }
+        
+        .message-user .message-content {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .message-ai .message-content {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+        
+        .chat-input-container {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--gray-200);
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        .send-button {
+            padding: 12px 24px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .send-button:hover {
+            background: var(--primary-dark);
+        }
+        
+        .send-button:disabled {
+            background: var(--gray-300);
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container chat-wrapper">
+        <div class="chat-header">
+            <h1>💬 AI Chat Assistant</h1>
+            <p>Ask me about your expenses, create new ones, or get insights!</p>
+            <a href="/Index" class="btn btn-secondary" style="margin-top: 12px;">← Back to Dashboard</a>
+        </div>
+
+        <div class="chat-box">
+            <div class="chat-messages" id="chat-messages">
+                @if (!Model.IsChatEnabled)
+                {
+                    <div class="message message-ai">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            Chat service is not available. Azure OpenAI is not configured or deployed.
+                            Please set DEPLOY_GENAI=true in deploy.sh and redeploy to enable chat features.
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="message message-ai">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            Hello! I'm your AI assistant for expense management. I can help you:
+                            <ul style="margin: 8px 0; padding-left: 20px;">
+                                <li>View and search your expenses</li>
+                                <li>Create new expense entries</li>
+                                <li>Get summaries and insights</li>
+                                <li>Answer questions about the system</li>
+                            </ul>
+                            How can I help you today?
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="chat-input-container">
+                <input 
+                    type="text" 
+                    class="chat-input" 
+                    id="user-input" 
+                    placeholder="Type your message..."
+                    @(Model.IsChatEnabled ? "" : "disabled")
+                />
+                <button 
+                    class="send-button" 
+                    id="send-button"
+                    @(Model.IsChatEnabled ? "" : "disabled")
+                >
+                    Send
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatEnabled = @Model.IsChatEnabled.ToString().ToLower();
+        const messagesContainer = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        let conversationHistory = [];
+
+        function addMessage(content, isUser) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'message-user' : 'message-ai'}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'message-avatar';
+            avatar.textContent = isUser ? '👤' : '🤖';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            if (!chatEnabled) return;
+            
+            const message = userInput.value.trim();
+            if (!message) return;
+            
+            addMessage(message, true);
+            userInput.value = '';
+            sendButton.disabled = true;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, conversationHistory })
+                });
+                
+                const data = await response.json();
+                addMessage(data.response, false);
+                conversationHistory = data.conversationHistory || [];
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Sorry, I encountered an error. Please try again.', false);
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

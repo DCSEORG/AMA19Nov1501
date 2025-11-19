@@ -1,0 +1,374 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Expense Management";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="stylesheet" href="~/css/modern-styles.css" />
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💼 Expense Management System</h1>
+            <p>Manage and track your business expenses efficiently</p>
+        </div>
+
+        <div class="nav-tabs">
+            <a href="#my-expenses" class="nav-tab active" onclick="showTab('my-expenses', event)">My Expenses</a>
+            <a href="#new-expense" class="nav-tab" onclick="showTab('new-expense', event)">New Expense</a>
+            <a href="#pending-approval" class="nav-tab" onclick="showTab('pending-approval', event)">Pending Approval</a>
+            <a href="/swagger" class="nav-tab" target="_blank">API Docs</a>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Expenses</div>
+                <div class="stat-value" id="total-expenses">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Pending</div>
+                <div class="stat-value" id="pending-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Approved</div>
+                <div class="stat-value" id="approved-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Amount</div>
+                <div class="stat-value" id="total-amount">£0.00</div>
+            </div>
+        </div>
+
+        <div id="my-expenses" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">My Expenses</h2>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenses-tbody">
+                            <tr>
+                                <td colspan="6" class="empty-state">
+                                    <div class="empty-state-icon">📋</div>
+                                    <p>Loading expenses...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="new-expense" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Create New Expense</h2>
+                </div>
+                <form id="expense-form">
+                    <div class="form-group">
+                        <label class="form-label" for="userId">Employee</label>
+                        <select class="form-control" id="userId" required>
+                            <option value="">Select employee...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="categoryId">Category</label>
+                        <select class="form-control" id="categoryId" required>
+                            <option value="">Select category...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="amount">Amount (£)</label>
+                        <input type="number" class="form-control" id="amount" step="0.01" min="0" required />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="expenseDate">Date</label>
+                        <input type="date" class="form-control" id="expenseDate" required />
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="description">Description</label>
+                        <textarea class="form-control" id="description" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Expense</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="pending-approval" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Expenses Pending Approval</h2>
+                </div>
+                <div class="table-container">
+                    <table class="modern-table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th>Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-tbody">
+                            <tr>
+                                <td colspan="6" class="empty-state">
+                                    <div class="empty-state-icon">✅</div>
+                                    <p>Loading pending expenses...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.EnableChatUI)
+    {
+        <div class="chat-container">
+            <button class="chat-button" onclick="window.location.href='/Chat'" title="AI Chat Assistant">
+                💬
+            </button>
+        </div>
+    }
+
+    <script>
+        let currentUserId = 1; // Default to first user
+        let currentManagerId = 2; // Default to manager
+
+        // Tab switching
+        function showTab(tabId, event) {
+            if (event) {
+                event.preventDefault();
+                document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+                event.target.classList.add('active');
+            }
+            document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+            document.getElementById(tabId).style.display = 'block';
+            
+            if (tabId === 'my-expenses') {
+                loadExpenses();
+            } else if (tabId === 'pending-approval') {
+                loadPendingExpenses();
+            }
+        }
+
+        // Load expenses
+        async function loadExpenses() {
+            try {
+                const response = await fetch(`/api/expenses?userId=${currentUserId}`);
+                const expenses = await response.json();
+                
+                const tbody = document.getElementById('expenses-tbody');
+                if (expenses.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-icon">📋</div><p>No expenses found</p></td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = expenses.map(expense => `
+                    <tr>
+                        <td>${new Date(expense.expenseDate).toLocaleDateString()}</td>
+                        <td>${expense.categoryName}</td>
+                        <td>${expense.description || 'N/A'}</td>
+                        <td>£${expense.amountGBP.toFixed(2)}</td>
+                        <td><span class="badge badge-${expense.statusName.toLowerCase()}">${expense.statusName}</span></td>
+                        <td class="action-buttons">
+                            ${expense.statusId === 1 ? `<button class="btn btn-primary" onclick="submitExpense(${expense.expenseId})">Submit</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+                
+                updateStats(expenses);
+            } catch (error) {
+                console.error('Error loading expenses:', error);
+                document.getElementById('expenses-tbody').innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-icon">⚠️</div><p>Error loading expenses. Using demo data.</p></td></tr>';
+            }
+        }
+
+        // Load pending expenses for approval
+        async function loadPendingExpenses() {
+            try {
+                const response = await fetch('/api/expenses?status=Submitted');
+                const expenses = await response.json();
+                
+                const tbody = document.getElementById('pending-tbody');
+                if (expenses.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-icon">✅</div><p>No pending expenses</p></td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = expenses.map(expense => `
+                    <tr>
+                        <td>${expense.userName}</td>
+                        <td>${new Date(expense.expenseDate).toLocaleDateString()}</td>
+                        <td>${expense.categoryName}</td>
+                        <td>${expense.description || 'N/A'}</td>
+                        <td>£${expense.amountGBP.toFixed(2)}</td>
+                        <td class="action-buttons">
+                            <button class="btn btn-success" onclick="approveExpense(${expense.expenseId})">Approve</button>
+                            <button class="btn btn-danger" onclick="rejectExpense(${expense.expenseId})">Reject</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading pending expenses:', error);
+            }
+        }
+
+        // Update statistics
+        function updateStats(expenses) {
+            document.getElementById('total-expenses').textContent = expenses.length;
+            document.getElementById('pending-count').textContent = expenses.filter(e => e.statusId === 2).length;
+            document.getElementById('approved-count').textContent = expenses.filter(e => e.statusId === 3).length;
+            const total = expenses.reduce((sum, e) => sum + e.amountGBP, 0);
+            document.getElementById('total-amount').textContent = `£${total.toFixed(2)}`;
+        }
+
+        // Submit expense
+        async function submitExpense(expenseId) {
+            try {
+                const response = await fetch(`/api/expenses/${expenseId}/submit`, { method: 'POST' });
+                if (response.ok) {
+                    alert('Expense submitted successfully!');
+                    loadExpenses();
+                } else {
+                    alert('Failed to submit expense');
+                }
+            } catch (error) {
+                console.error('Error submitting expense:', error);
+                alert('Error submitting expense');
+            }
+        }
+
+        // Approve expense
+        async function approveExpense(expenseId) {
+            try {
+                const response = await fetch(`/api/expenses/${expenseId}/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentManagerId)
+                });
+                if (response.ok) {
+                    alert('Expense approved!');
+                    loadPendingExpenses();
+                } else {
+                    alert('Failed to approve expense');
+                }
+            } catch (error) {
+                console.error('Error approving expense:', error);
+                alert('Error approving expense');
+            }
+        }
+
+        // Reject expense
+        async function rejectExpense(expenseId) {
+            try {
+                const response = await fetch(`/api/expenses/${expenseId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentManagerId)
+                });
+                if (response.ok) {
+                    alert('Expense rejected!');
+                    loadPendingExpenses();
+                } else {
+                    alert('Failed to reject expense');
+                }
+            } catch (error) {
+                console.error('Error rejecting expense:', error);
+                alert('Error rejecting expense');
+            }
+        }
+
+        // Create new expense
+        document.getElementById('expense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                userId: parseInt(document.getElementById('userId').value),
+                categoryId: parseInt(document.getElementById('categoryId').value),
+                amountGBP: parseFloat(document.getElementById('amount').value),
+                expenseDate: document.getElementById('expenseDate').value,
+                description: document.getElementById('description').value
+            };
+            
+            try {
+                const response = await fetch('/api/expenses', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+                
+                if (response.ok) {
+                    alert('Expense created successfully!');
+                    document.getElementById('expense-form').reset();
+                    showTab('my-expenses', null);
+                    loadExpenses();
+                } else {
+                    alert('Failed to create expense');
+                }
+            } catch (error) {
+                console.error('Error creating expense:', error);
+                alert('Error creating expense');
+            }
+        });
+
+        // Load users and categories
+        async function loadFormData() {
+            try {
+                const [usersResponse, categoriesResponse] = await Promise.all([
+                    fetch('/api/users'),
+                    fetch('/api/categories')
+                ]);
+                
+                const users = await usersResponse.json();
+                const categories = await categoriesResponse.json();
+                
+                const userSelect = document.getElementById('userId');
+                userSelect.innerHTML = '<option value="">Select employee...</option>' +
+                    users.map(u => `<option value="${u.userId}">${u.userName}</option>`).join('');
+                
+                const categorySelect = document.getElementById('categoryId');
+                categorySelect.innerHTML = '<option value="">Select category...</option>' +
+                    categories.map(c => `<option value="${c.categoryId}">${c.categoryName}</option>`).join('');
+                    
+                if (users.length > 0) {
+                    currentUserId = users[0].userId;
+                    if (users.length > 1) {
+                        currentManagerId = users.find(u => u.roleName === 'Manager')?.userId || users[1].userId;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading form data:', error);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadFormData();
+            loadExpenses();
+            
+            // Set default date to today
+            document.getElementById('expenseDate').valueAsDate = new Date();
+        });
+    </script>
+</body>
+</html>
